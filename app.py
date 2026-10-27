@@ -1,15 +1,16 @@
 import random
 import re
+from urllib.parse import quote
 import chess
 import streamlit as st
 
 # Set web page styling
 st.set_page_config(page_title="Chess Endgame Generator", page_icon="♟️", layout="centered")
 
-def generate_endgame_position(piece_string, side_to_move, difficulty):
+def generate_endgame_position(piece_string, side_to_move, difficulty, platform):
     """
     Parses a string of piece symbols, generates a random valid chess position,
-    and returns a Lichess link that jumps straight into play-against-computer mode.
+    and returns a platform-specific direct-play URL.
     """
     # 1. Clean the input string and separate by spaces or commas
     cleaned_input = re.sub(r'[^a-zA-Z]', ' ', piece_string)
@@ -77,15 +78,25 @@ def generate_endgame_position(piece_string, side_to_move, difficulty):
         
         # Check rule engine validity (no touching kings, side not moving isn't in check)
         if board.is_valid():
-            fen_url_safe = board.fen().replace(" ", "_")
-            # Jumps directly into play vs computer mode with custom FEN position
-            return f"https://lichess.org/?fen={fen_url_safe}#ai"
+            raw_fen = board.fen()
+            
+            # --- Platform URL Routing ---
+            if platform == "Lichess":
+                fen_url_safe = raw_fen.replace(" ", "_")
+                return f"https://lichess.org{fen_url_safe}#ai"
+            else:
+                # Fully urlencode the FEN block to preserve separators
+                fen_url_safe = quote(raw_fen)
+                return f"https://www.chess.com/play/computer?fen={fen_url_safe}"
             
     raise RuntimeError("Could not find a legally valid random configuration. Try fewer pieces.")
 
 # --- Streamlit Web Interface Design ---
 st.title("♟️ Custom Chess Endgame Generator")
-st.write("Generate custom endgame configurations instantly and export them directly into Lichess to practice against the engine.")
+st.write("Generate custom endgame configurations instantly and export them directly to your favorite platform to play against the engine.")
+
+# Platform Choice
+platform_selection = st.radio("Choose Target Platform:", ["Lichess", "Chess.com"], horizontal=True)
 
 # Input Layout
 piece_input = st.text_input(
@@ -110,16 +121,17 @@ if st.button("Generate & Practice Position", type="primary"):
     else:
         with st.spinner("Finding a legally valid board position..."):
             try:
-                lichess_url = generate_endgame_position(
+                target_url = generate_endgame_position(
                     piece_string=piece_input,
                     side_to_move=turn_selection,
-                    difficulty=difficulty_selection
+                    difficulty=difficulty_selection,
+                    platform=platform_selection
                 )
                 
-                st.success("🎉 Board layout successfully built!")
+                st.success(f"🎉 Board layout successfully built for {platform_selection}!")
                 
                 # Display direct button to jump straight into active play choice
-                st.link_button("👉 Open & Practice on Lichess", lichess_url)
+                st.link_button(f"👉 Open & Practice on {platform_selection}", target_url)
                 
             except ValueError as ve:
                 st.error(f"Input Error: {ve}")
