@@ -1,6 +1,7 @@
 import random
 import re
 import chess
+import chess.svg
 import streamlit as st
 
 # Set web page styling
@@ -9,7 +10,7 @@ st.set_page_config(page_title="Chess Endgame Generator", page_icon="♟️", lay
 def generate_endgame_position(piece_string, side_to_move, difficulty, platform):
     """
     Parses a string of piece symbols, generates a random valid chess position,
-    and returns a platform-specific URL with manually managed character formatting.
+    and returns (fen, platform_url) with manually managed character formatting.
     """
     # 1. Clean the input string and separate by spaces or commas
     cleaned_input = re.sub(r'[^a-zA-Z]', ' ', piece_string)
@@ -82,11 +83,13 @@ def generate_endgame_position(piece_string, side_to_move, difficulty, platform):
             # --- Platform URL Routing ---
             if platform == "Lichess":
                 fen_url_safe = raw_fen.replace(" ", "_")
-                return f"https://lichess.org/?fen={fen_url_safe}#ai"
+                url = f"https://lichess.org/?fen={fen_url_safe}#ai"
             else:
                 # Direct string formatting safely translates characters for Chess.com without trigger errors
                 fen_url_safe = raw_fen.replace(" ", "+")
-                return f"https://chess.com/analysis?fen={fen_url_safe}"
+                url = f"https://chess.com/analysis?fen={fen_url_safe}"
+            
+            return raw_fen, url
             
     raise RuntimeError("Could not find a legally valid random configuration. Try fewer pieces.")
 
@@ -120,19 +123,51 @@ if st.button("Generate & Practice Position", type="primary"):
     else:
         with st.spinner("Finding a legally valid board position..."):
             try:
-                target_url = generate_endgame_position(
+                fen, target_url = generate_endgame_position(
                     piece_string=piece_input,
                     side_to_move=turn_selection,
                     difficulty=difficulty_selection,
                     platform=platform_selection
                 )
-                
-                st.success(f"🎉 Board layout successfully built for {platform_selection}!")
-                
-                # Using a native text link inside st.info is the safest layout option for mobile browsers
-                st.info("💡 Your position is ready! Click the link below to start practicing:")
-                st.link_button(f"👉 Open & Practice on {platform_selection}", target_url, use_container_width=True)
+                # Persist the result so it survives reruns (e.g. toggling "Flip board")
+                st.session_state["result"] = {
+                    "fen": fen,
+                    "url": target_url,
+                    "platform": platform_selection,
+                    "turn": turn_selection,
+                }
             except ValueError as ve:
+                st.session_state.pop("result", None)
                 st.error(f"Input Error: {ve}")
             except Exception as e:
+                st.session_state.pop("result", None)
                 st.error(f"Generation Failed: {e}. Try adjusting your piece composition.")
+
+# --- Display the most recent result ---
+if "result" in st.session_state:
+    result = st.session_state["result"]
+    board = chess.Board(result["fen"])
+
+    st.success(f"🎉 Board layout successfully built for {result['platform']}!")
+
+    # Feature 1: visual board
+    flip = st.checkbox(
+        "Flip board",
+        value=(result["turn"] == "Black"),
+        help="Defaults to the side that moves first"
+    )
+    svg = chess.svg.board(
+        board,
+        orientation=chess.BLACK if flip else chess.WHITE,
+        size=400,
+    )
+    st.image(svg, use_container_width=True)
+    st.caption(f"{result['turn']} to move")
+
+    # Feature 2: copyable FEN (st.code includes a copy icon at the top right)
+    st.markdown("**FEN** (use the copy icon at the top right of the box):")
+    st.code(result["fen"], language=None)
+
+    # Using a native text link inside st.info is the safest layout option for mobile browsers
+    st.info("💡 Your position is ready! Click the link below to start practicing:")
+    st.link_button(f"👉 Open & Practice on {result['platform']}", result["url"], use_container_width=True)
