@@ -1,6 +1,5 @@
 import random
 import re
-from urllib.parse import quote
 import chess
 import streamlit as st
 
@@ -10,7 +9,7 @@ st.set_page_config(page_title="Chess Endgame Generator", page_icon="♟️", lay
 def generate_endgame_position(piece_string, side_to_move, difficulty, platform):
     """
     Parses a string of piece symbols, generates a random valid chess position,
-    and returns a platform-specific direct-play URL.
+    and returns a platform-specific URL with manually managed character formatting.
     """
     # 1. Clean the input string and separate by spaces or commas
     cleaned_input = re.sub(r'[^a-zA-Z]', ' ', piece_string)
@@ -83,11 +82,11 @@ def generate_endgame_position(piece_string, side_to_move, difficulty, platform):
             # --- Platform URL Routing ---
             if platform == "Lichess":
                 fen_url_safe = raw_fen.replace(" ", "_")
-                return f"https://lichess.org{fen_url_safe}#ai"
+                return f"https://lichess.org/?fen={fen_url_safe}#ai"
             else:
-                # Fully urlencode the FEN block to preserve separators
-                fen_url_safe = quote(raw_fen)
-                return f"https://www.chess.com/play/computer?fen={fen_url_safe}"
+                # Direct string formatting safely translates characters for Chess.com without trigger errors
+                fen_url_safe = raw_fen.replace(" ", "+")
+                return f"https://chess.com/analysis?fen={fen_url_safe}"
             
     raise RuntimeError("Could not find a legally valid random configuration. Try fewer pieces.")
 
@@ -130,9 +129,9 @@ if st.button("Generate & Practice Position", type="primary"):
                 
                 st.success(f"🎉 Board layout successfully built for {platform_selection}!")
                 
-                # Display direct button to jump straight into active play choice
-                st.link_button(f"👉 Open & Practice on {platform_selection}", target_url)
-                
+                # Using a native text link inside st.info is the safest layout option for mobile browsers
+                st.info("💡 Your position is ready! Click the link below to start practicing:")
+                st.link_button(f"👉 Open & Practice on {platform_selection}", target_url, use_container_width=True)
             except ValueError as ve:
                 st.error(f"Input Error: {ve}")
             except Exception as e:
